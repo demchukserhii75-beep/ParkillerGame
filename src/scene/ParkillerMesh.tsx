@@ -176,8 +176,16 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // in the config (ParkillerEditor.tsx still has a control bound to it) but is rendered dark below
   // instead of removed, so it visually disappears into the cavity rather than showing as a red
   // highlight - reported directly that any visible red inside the hood read as wrong.
-  cavity: { position: [0, 2.32, 0.34], scale: [0.17, 0.32, 0.13] },
-  face: { position: [0, 2.32, 0.34], scale: [0.12, 0.22, 0.08] },
+  //
+  // Reported directly, again, against the same reference: the cavity read as a dark growth stuck
+  // *onto* the outside of the hood, not a hollow recessed into it. Root cause - the hood's own
+  // radius at y=2.32 is only ~0.186 (HOOD_PROFILE_RAW interpolated), but this sphere's old z=0.34
+  // center plus its own 0.13 z-scale put its *entire* volume (z from 0.21 to 0.47) outside that
+  // radius - none of it was ever actually inside the hood mesh. Pulled in to z=0.06 so the sphere's
+  // front face (0.06+0.13=0.19) sits right at the hood's own surface instead of far past it -
+  // reads as a recessed opening, not an applied bump.
+  cavity: { position: [0, 2.2, 0.09], scale: [0.17, 0.32, 0.13] },
+  face: { position: [0, 2.2, 0.09], scale: [0.12, 0.22, 0.08] },
   // Reported directly, twice now: the clasped-hands-in-front pose read as wrong against the
   // client's reference photo (public/reference/parkiller-full.png, a physical figurine
   // turnaround) - every angle of that photo shows two distinct hands hanging separately at the
@@ -202,25 +210,33 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // previously-reverted magnitude.
   //
   // Split into two capsules (shoulder->elbow->hand) instead of one straight shoulder->hand capsule
-  // - a bent elbow reads as a real arm, not a rigid rod, and was worth adopting on its own merits
-  // after prototyping it against an (otherwise-rejected, see ParkillerModelV2.tsx) alternate body
-  // structure proposal. shoulder/elbow were chosen to keep the exact same overall arm envelope the
-  // single-capsule version already had - shoulder is the reconstructed old capsule's own attachment
-  // point (2*oldCenter - hand, since arm.position was that capsule's midpoint), elbow is offset
-  // outward+forward from the old straight-line path for a visible but modest bend. Both capsules'
-  // own position/rotation/length were computed via three's own Quaternion/Euler math (matching how
-  // the original single-capsule arm's rotation was derived - see this file's own git history), not
-  // hand-guessed trig.
+  // - a bent elbow reads as a real arm, not a rigid rod. Reported directly, again, against the
+  // parkiller.png turnaround sheet: the previous shoulder/elbow numbers read as two arms flung out
+  // to the sides, not hanging at the sides - traced to the upper and lower capsule not actually
+  // meeting at a shared elbow point. The previous shoulder was reconstructed as `2*oldCenter -
+  // hand` from an even earlier single-capsule version, and the elbow was a separate "offset
+  // outward+forward from the old straight-line path" guess - neither was ever checked against the
+  // other, and they landed nowhere near each other (a ~0.4-unit gap, comparable to the whole arm's
+  // own length): the upper capsule's own far end was already down at hip height while the lower
+  // capsule's own near end started back up near mid-torso, so the two overlapped in the lower half
+  // instead of chaining shoulder->elbow->hand, reading as a bulky clump reaching outward.
+  //
+  // Rebuilt from three explicit points instead - shoulder (near the body's own surface, ~y=1.65),
+  // elbow (a modest outward bend, ~y=1.18), hand (hip height, ~y=0.82, clearing the body's own
+  // flared radius there per BODY_PROFILE_RAW) - each capsule's position/rotation/length computed
+  // directly from its own two endpoints via three's own Quaternion.setFromUnitVectors +
+  // Euler.setFromQuaternion (not hand-derived trig), so the two segments are guaranteed to actually
+  // meet at the elbow point instead of being independently guessed.
   arms: [
     {
-      upperArm: { position: [0.433, 1.245, 0.175], rotation: [0.242, -0.482, -2.221], scale: [0.1, 0.378, 0.1] },
-      lowerArm: { position: [0.698, 0.945, 0.235], rotation: [0.034, -0.111, -2.554], scale: [0.09, 0.174, 0.09] },
-      hand: { position: [0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      upperArm: { position: [0.325, 1.435, 0.11], rotation: [0.367, -1.132, -2.573], scale: [0.09, 0.218, 0.09] },
+      lowerArm: { position: [0.6, 0.935, 0.2], rotation: [0.154, -0.327, -2.267], scale: [0.08, 0.184, 0.08] },
+      hand: { position: [0.8, 0.75, 0.24], scale: [0.17, 0.21, 0.17] },
     },
     {
-      upperArm: { position: [-0.433, 1.245, 0.175], rotation: [0.242, 0.482, 2.221], scale: [0.1, 0.378, 0.1] },
-      lowerArm: { position: [-0.698, 0.945, 0.235], rotation: [0.034, 0.111, 2.554], scale: [0.09, 0.174, 0.09] },
-      hand: { position: [-0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      upperArm: { position: [-0.325, 1.435, 0.11], rotation: [0.367, 1.132, 2.573], scale: [0.09, 0.218, 0.09] },
+      lowerArm: { position: [-0.6, 0.935, 0.2], rotation: [0.154, 0.327, 2.267], scale: [0.08, 0.184, 0.08] },
+      hand: { position: [-0.8, 0.75, 0.24], scale: [0.17, 0.21, 0.17] },
     },
   ],
   fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },
