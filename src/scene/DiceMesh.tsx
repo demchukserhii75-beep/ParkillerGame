@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import type { Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three-stdlib'
 import { BOARD_SIZE } from './boardGeometry'
+import { INTERACTIVE_CURSOR } from './interactiveCursor'
 
 extend({ RoundedBoxGeometry })
 
@@ -317,7 +318,7 @@ export function DiceMesh({
         castShadow
         onClick={onClick}
         onPointerOver={() => {
-          if (interactive) document.body.style.cursor = 'pointer'
+          if (interactive) document.body.style.cursor = INTERACTIVE_CURSOR
         }}
         onPointerOut={() => {
           if (interactive) document.body.style.cursor = 'auto'

@@ -6,6 +6,7 @@ import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
 import { playHopSound } from './hopSound'
+import { INTERACTIVE_CURSOR } from './interactiveCursor'
 import {
   BOUNCE_HEIGHT,
   HOP_DURATION,
@@ -476,7 +477,22 @@ export function ParkillerMesh({
   })
 
   return (
-    <group ref={meshRef} position={restPosition} scale={crowdedScale}>
+    <group
+      ref={meshRef}
+      position={restPosition}
+      scale={crowdedScale}
+      // Requested directly, alongside the dice/pawns getting the same treatment: the Parkiller has
+      // no click action of its own (PK1-8's own move is always automatic, never a player choice -
+      // see this file's own comments elsewhere), so this is a purely visual "this piece matters
+      // too" hover cue, not a selectability signal the way PieceMesh/DiceMesh's own cursor changes
+      // are.
+      onPointerOver={() => {
+        document.body.style.cursor = INTERACTIVE_CURSOR
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'auto'
+      }}
+    >
       <ParkillerModel color={color} config={DEFAULT_PARKILLER_CONFIG} />
     </group>
   )
