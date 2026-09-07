@@ -457,6 +457,119 @@ export default function OnlineLobbyScreen() {
     return <GameBoardScreen definition={BOARD_DEFINITIONS[playerCount]} session={session} onExit={() => (window.location.hash = '')} />
   }
 
+  // Reported directly, with a reference mockup image and a screenshot of the plain carved-wood
+  // card every other phase still uses: "make it match this style exactly". Scoped to the 'menu'
+  // phase only, as its own early return - every other phase (connecting/error/stopped/creating/
+  // joining/lobby, all reachable mid-flow, none of them what the mockup was actually of) keeps the
+  // original compact cardStyle rendering below completely untouched. logo-badge.png (the existing
+  // small circular badge) stands in for the mockup's own larger illustrated mascot/full logo
+  // lockup until that asset is dropped into the project - swap the header badge's src once it is.
+  if (phase === 'menu') {
+    return (
+      <div style={wrapperStyle}>
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
+          <StartScreenBackground />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+          }}
+        />
+        <div style={menuPanelStyle}>
+          <div style={menuHeaderRowStyle}>
+            <div style={menuHeaderLeftStyle}>
+              <img
+                src="/logo-badge.png"
+                alt="Parkiller"
+                style={{ width: 'clamp(46px, 12vw, 60px)', height: 'clamp(46px, 12vw, 60px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
+              />
+              <div>
+                <div style={menuWordmarkStyle}>PARKILLER</div>
+                <div style={menuTaglineStyle}>Tradición · Estrategia · Supervivencia</div>
+              </div>
+            </div>
+            <button
+              className="chunky-btn"
+              onClick={() => (window.location.hash = '')}
+              style={menuCloseButtonStyle}
+              aria-label="Cerrar"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={menuPlaqueStyle}>
+            <h1 style={menuTitleStyle}>Jugar online</h1>
+            <p style={menuSubtitleStyle}>Creá una sala nueva o unite con un código</p>
+          </div>
+
+          <div style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)' }}>¡Vamos a jugar! ✏️</div>
+
+          <div style={menuCardsRowStyle}>
+            <div style={menuCardStyle('#3fae66')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🏠</span>
+                <h3 style={menuCardTitleStyle}>Crear sala</h3>
+              </div>
+              <div>
+                <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[2, 3, 4, 5, 6].map((n, i) => (
+                    <button
+                      key={n}
+                      className="chunky-btn candy-btn"
+                      onClick={() => setPlayerCount(n)}
+                      style={{ ...countButtonStyle(n === playerCount, CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button className="chunky-btn" onClick={createRoom} style={coloredButtonStyle(true, '#3fae66')}>
+                Crear
+              </button>
+            </div>
+
+            <div style={menuCardStyle('#3f8ee0')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🔑</span>
+                <h3 style={menuCardTitleStyle}>Unirse a sala</h3>
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
+                <input
+                  value={roomCodeInput}
+                  onChange={(e) => setRoomCodeInput(e.target.value)}
+                  placeholder="CÓDIGO DE SALA"
+                  style={inputStyle}
+                />
+              </div>
+              <button
+                className="chunky-btn"
+                onClick={joinRoom}
+                disabled={!roomCodeInput.trim()}
+                style={coloredButtonStyle(Boolean(roomCodeInput.trim()), '#3f8ee0')}
+              >
+                Unirse
+              </button>
+            </div>
+          </div>
+
+          <div style={menuTipBannerStyle}>
+            <span style={{ fontSize: 20 }}>💡</span>
+            <span>Tip: compartí el código de sala con tus amigos para armarla juntos</span>
+          </div>
+
+          <button className="chunky-btn" onClick={() => (window.location.hash = '')} style={menuBackButtonStyle}>
+            ← Volver
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={wrapperStyle}>
       {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
@@ -500,51 +613,6 @@ export default function OnlineLobbyScreen() {
             <button className="chunky-btn" onClick={() => setPhase('menu')} style={chunkyButtonStyle(true)}>
               Volver al menú
             </button>
-          </div>
-        )}
-
-        {phase === 'menu' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: '100%' }}>
-            <div style={sectionStyle}>
-              <h3 style={sectionTitleStyle}>Crear sala</h3>
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[2, 3, 4, 5, 6].map((n, i) => (
-                    <button
-                      key={n}
-                      className="chunky-btn candy-btn"
-                      onClick={() => setPlayerCount(n)}
-                      style={{ ...countButtonStyle(n === playerCount, CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button className="chunky-btn" onClick={createRoom} style={chunkyButtonStyle(true)}>
-                Crear
-              </button>
-            </div>
-
-            <div style={sectionStyle}>
-              <h3 style={sectionTitleStyle}>Unirse a sala</h3>
-              <input
-                value={roomCodeInput}
-                onChange={(e) => setRoomCodeInput(e.target.value)}
-                placeholder="CÓDIGO DE SALA"
-                style={inputStyle}
-              />
-              <div style={{ height: 12 }} />
-              <button
-                className="chunky-btn"
-                onClick={joinRoom}
-                disabled={!roomCodeInput.trim()}
-                style={chunkyButtonStyle(Boolean(roomCodeInput.trim()))}
-              >
-                Unirse
-              </button>
-            </div>
           </div>
         )}
 
@@ -684,13 +752,6 @@ const sectionStyle: React.CSSProperties = {
   border: '1px solid rgba(201,162,75,0.35)',
 }
 
-const sectionTitleStyle: React.CSSProperties = {
-  margin: '0 0 12px 0',
-  fontSize: 16,
-  fontWeight: 700,
-  color: '#e8cf8a',
-}
-
 const hintStyle: React.CSSProperties = {
   fontSize: 13,
   color: '#d8d2c2',
@@ -815,5 +876,198 @@ function countButtonStyle(selected: boolean, colorHex: string): React.CSSPropert
     textShadow: '0 2px 0 rgba(0,0,0,0.25)',
     cursor: 'pointer',
   }
+}
+
+// --- 'menu' phase only, below - see that phase's own early-return above for why it's a fully
+// separate layout rather than another branch inside cardStyle. Wider panel (two side-by-side
+// cards need more room than the 400px compact card every other phase still uses), and its own
+// header/plaque/tip-banner styles that don't apply anywhere else in this file.
+
+const menuPanelStyle: React.CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 20,
+  padding: 'clamp(20px, 4vh, 32px) clamp(18px, 5vw, 36px)',
+  borderRadius: 28,
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
+  border: '2px solid #7a5f26',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+  width: 'min(760px, 94vw)',
+  maxHeight: '94vh',
+  overflowY: 'auto',
+  boxSizing: 'border-box',
+}
+
+const menuHeaderRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+}
+
+const menuHeaderLeftStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 14,
+}
+
+const menuWordmarkStyle: React.CSSProperties = {
+  fontFamily: "'Baloo 2', system-ui, sans-serif",
+  fontSize: 'clamp(18px, 4.5vw, 24px)',
+  fontWeight: 800,
+  letterSpacing: 1.5,
+  color: '#e8cf8a',
+  textShadow: '0 2px 0 #7a5f26, 0 3px 8px rgba(0,0,0,0.5)',
+  lineHeight: 1.15,
+}
+
+const menuTaglineStyle: React.CSSProperties = {
+  fontSize: 'clamp(9px, 2.2vw, 11px)',
+  letterSpacing: 1.5,
+  fontWeight: 700,
+  color: '#c9a24b',
+  textTransform: 'uppercase',
+}
+
+const menuCloseButtonStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  minWidth: 40,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 18,
+  fontWeight: 800,
+  color: '#e8cf8a',
+  background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
+  border: '2px solid #7a5f26',
+  boxShadow: '0 4px 0 #4a3a1a, 0 6px 10px rgba(0,0,0,0.35)',
+  cursor: 'pointer',
+  flexShrink: 0,
+}
+
+const menuPlaqueStyle: React.CSSProperties = {
+  alignSelf: 'center',
+  textAlign: 'center',
+  padding: '14px 32px',
+  borderRadius: 14,
+  background: 'rgba(0,0,0,0.22)',
+  border: '2px solid rgba(201,162,75,0.5)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+  transform: 'rotate(-1deg)',
+}
+
+const menuTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontFamily: "'Baloo 2', system-ui, sans-serif",
+  fontSize: 'clamp(26px, 6.5vw, 38px)',
+  fontWeight: 800,
+  color: '#e8cf8a',
+  textShadow: '0 2px 0 #7a5f26, 0 4px 10px rgba(0,0,0,0.5)',
+}
+
+const menuSubtitleStyle: React.CSSProperties = {
+  margin: '4px 0 0',
+  fontSize: 14,
+  color: '#d8d2c2',
+}
+
+// Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
+// mockup's own scattered hand-drawn annotations - the one place in the whole app that isn't the
+// carved-wood Baloo2/system-ui look, deliberately, to read as a marker doodle rather than UI copy.
+const menuDoodleStyle: React.CSSProperties = {
+  fontFamily: "'Caveat', cursive",
+  fontWeight: 700,
+  fontSize: 'clamp(20px, 4.5vw, 26px)',
+  color: '#f5e2a8',
+  transform: 'rotate(-4deg)',
+  textShadow: '0 2px 6px rgba(0,0,0,0.4)',
+}
+
+const menuCardsRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 18,
+  flexWrap: 'wrap',
+}
+
+// Parameterized by hue (green for "Crear sala", blue for "Unirse a sala" - see the mockup's own
+// two-card color coding) rather than another exact style-object duplicate, since these two cards
+// are the same shape and only ever differ by which color they're themed in.
+function menuCardStyle(hex: string): React.CSSProperties {
+  const dark = lighten(hex, -0.55)
+  const darker = lighten(hex, -0.68)
+  const edge = lighten(hex, -0.15)
+  return {
+    flex: '1 1 260px',
+    minWidth: 240,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 14,
+    padding: '20px 20px 22px',
+    borderRadius: 22,
+    background: `linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%), linear-gradient(165deg, ${dark}, ${darker})`,
+    border: `2px solid ${edge}`,
+    boxShadow: `0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 3px ${hex}33`,
+  }
+}
+
+const menuCardTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontFamily: "'Baloo 2', system-ui, sans-serif",
+  fontSize: 20,
+  fontWeight: 800,
+  color: '#fff6e0',
+  textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+}
+
+// Same carved-3D recipe as chunkyButtonStyle above, parameterized by hue instead of the fixed
+// gold - the two menu cards need their own green/blue "this is active" color, not the app's usual
+// single gold accent every other button in the file still uses untouched.
+function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties {
+  const light = lighten(hex, 0.35)
+  const dark = lighten(hex, -0.35)
+  return {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '14px 24px',
+    fontSize: 17,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    fontFamily: "'Baloo 2', system-ui, sans-serif",
+    color: enabled ? '#fff6e0' : '#8a8a80',
+    background: enabled
+      ? `linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, ${light} 0%, ${hex} 48%, ${dark} 100%)`
+      : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
+    border: `3px solid ${enabled ? dark : '#4a4a44'}`,
+    borderRadius: 16,
+    boxShadow: enabled
+      ? `0 5px 0 ${dark}, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)`
+      : '0 5px 0 #3a3a34, 0 8px 12px rgba(0,0,0,0.3)',
+    textShadow: enabled ? '0 1px 2px rgba(0,0,0,0.35)' : 'none',
+    cursor: enabled ? 'pointer' : 'default',
+  }
+}
+
+const menuTipBannerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '12px 16px',
+  borderRadius: 14,
+  border: '2px dashed rgba(232,207,138,0.5)',
+  background: 'rgba(0,0,0,0.2)',
+  fontFamily: "'Caveat', cursive",
+  fontWeight: 700,
+  fontSize: 'clamp(16px, 3.5vw, 19px)',
+  color: '#f5e2a8',
+}
+
+const menuBackButtonStyle: React.CSSProperties = {
+  ...secondaryButtonStyle,
+  alignSelf: 'center',
+  width: 'auto',
+  padding: '10px 26px',
 }
 
