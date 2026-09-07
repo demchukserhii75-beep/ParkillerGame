@@ -106,6 +106,14 @@ declare module 'photon-realtime' {
       isJoinedToRoom(): boolean
       connectToRegionMaster(region: string): void
       disconnect(): void
+      /** Sends an explicit Leave operation to the server before tearing down local state -
+       * confirmed directly in the SDK source (leaveRoom: `this.gamePeer.sendOperation(Leave,...)`,
+       * then `_cleanupGamePeerData()`). This is what makes the *other* clients' onActorLeave fire
+       * immediately, with cleanup=false (a genuine, individually-reported departure) - unlike a
+       * raw disconnect() (or the socket just dying), which the server can only detect via a missed
+       * ping and, with playerTTL set, treats cautiously as "maybe reconnecting" first. See
+       * photonClient.ts's own leaveRoom() for why this matters. */
+      leaveRoom(): void
       joinRoom(roomName: string, joinOptions?: RoomOptions, createOptions?: RoomOptions): void
       raiseEvent(code: number, data: unknown, options?: { receivers?: number }): void
       myActor(): Actor

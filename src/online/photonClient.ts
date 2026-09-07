@@ -307,6 +307,21 @@ export class PhotonConnection implements RoomTransport {
     }
   }
 
+  // Reported directly: a player refreshing their own page mid-game left every other client stuck
+  // playing on as if nothing happened. Root cause - a page refresh (or this client's own "exit"
+  // button, before this fix) tore the connection down via disconnect() alone, which never tells
+  // the server *why* the socket is closing - indistinguishable, from the server's own side, from a
+  // transient network blip. With playerTTL now set (see createRoom's own comment), that ambiguity
+  // is exactly what makes the server hold the seat open for a possible reconnect instead of
+  // notifying anyone right away - correct for a real blip, but a refreshed/closed page never
+  // reconnects, so every remaining client just sat there for up to the full grace period with no
+  // sign anything was wrong. leaveRoom() removes the ambiguity: it's an explicit "I'm leaving"
+  // operation sent to the server before any local state is torn down, so the other clients' own
+  // onActorLeft fires immediately, exactly like a deliberate departure should.
+  leaveRoom(): void {
+    if (this.client.isJoinedToRoom()) this.client.leaveRoom()
+  }
+
   disconnect(): void {
     this.client.disconnect()
   }

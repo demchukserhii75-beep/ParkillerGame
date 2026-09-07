@@ -148,8 +148,20 @@ export default function OnlineLobbyScreen() {
         setErrorMessage(`No se pudo conectar: ${err instanceof Error ? err.message : String(err)}`)
         setPhase('error')
       })
+    // See PhotonConnection's own leaveRoom() doc comment - a refresh or tab close never runs
+    // React's own unmount cleanup below in time to matter, so this is the only chance to get the
+    // explicit Leave operation out before the page actually tears down. pagehide fires more
+    // reliably than beforeunload across mobile browsers and bfcache navigations (confirmed
+    // directly against MDN's own compatibility notes) - registered for both since neither is
+    // universally guaranteed on its own.
+    const leaveOnUnload = () => connection.leaveRoom()
+    window.addEventListener('pagehide', leaveOnUnload)
+    window.addEventListener('beforeunload', leaveOnUnload)
     return () => {
+      window.removeEventListener('pagehide', leaveOnUnload)
+      window.removeEventListener('beforeunload', leaveOnUnload)
       botControllerRef.current?.dispose()
+      connection.leaveRoom()
       connection.disconnect()
     }
   }, [])
