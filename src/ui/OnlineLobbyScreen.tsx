@@ -51,6 +51,25 @@ function generateRoomCode(): string {
   return code
 }
 
+// Reported directly, with a screenshot: a raw SDK internal message ("Client: Master: [203]
+// PhotonPeer[_send] - Operation 226 - failed...") landed straight on screen. photonClient.ts's own
+// rejections were always plain English reasons (or, before that file's own fix alongside this one,
+// an occasional raw SDK string) meant to be translated here - per that file's own comment - but
+// nothing here ever actually did the translating, so whatever came back from the promise just got
+// interpolated directly into the displayed message. Matches on a substring rather than an exact
+// string so this still degrades to the generic fallback (never a raw/English leak) if photonClient's
+// own wording ever changes without this list being updated to match.
+function friendlyOnlineError(rawMessage: string): string {
+  if (rawMessage.includes('room does not exist')) return 'La sala no existe. Revisá el código.'
+  if (rawMessage.includes('room is full')) return 'La sala ya está llena.'
+  if (rawMessage.includes('room has already started')) return 'Esa partida ya empezó.'
+  if (rawMessage.includes('room code already in use')) return 'Ese código de sala ya está en uso - probá de nuevo.'
+  if (rawMessage.includes('lost connection') || rawMessage.includes('connection failed') || rawMessage.includes('not connected')) {
+    return 'Se perdió la conexión con el servidor.'
+  }
+  return 'No se pudo conectar. Probá de nuevo en un momento.'
+}
+
 // Every seat's color is a pure function of actorNr rank - the lowest actorNr in the room (always
 // the creator, Photon's own rule) gets colors[0], matching "the room creator goes first", and so
 // on. actorNr is Photon's own intrinsic actor identifier, assigned synchronously as part of the
@@ -130,7 +149,16 @@ export default function OnlineLobbyScreen() {
   // actor-left effect below). A bot has no connected actor at all, so it can never appear here.
   const realSeatsRef = useRef<Record<number, PieceColor>>({})
 
-  // Mount-only - connects once against the fixed PHOTON_REGION above.
+  // Reported directly, with a screenshot: hitting a connection error left the player stuck on a
+  // dead-end screen with no way back - phase 'error' rendered the message and nothing else, and
+  // the mount effect below only ever ran its connect() once for this component's whole lifetime.
+  // Bumped by the "Reintentar" button (see the 'error' phase's own render below) specifically to
+  // re-run that effect on demand: React tears down the previous connection via this same effect's
+  // own cleanup (leaveRoom + disconnect) before setting up a fresh PhotonConnection and calling
+  // connect() again, exactly what a real retry needs - reusing the old, possibly-broken connection
+  // object instead wouldn't reliably recover from whatever state it died in.
+  const [connectAttempt, setConnectAttempt] = useState(0)
+
   useEffect(() => {
     const appId = import.meta.env.VITE_PHOTON_APP_ID
     if (!appId) {
@@ -145,7 +173,7 @@ export default function OnlineLobbyScreen() {
       .connect(PHOTON_REGION)
       .then(() => setPhase('menu'))
       .catch((err: unknown) => {
-        setErrorMessage(`No se pudo conectar: ${err instanceof Error ? err.message : String(err)}`)
+        setErrorMessage(friendlyOnlineError(err instanceof Error ? err.message : String(err)))
         setPhase('error')
       })
     // See PhotonConnection's own leaveRoom() doc comment - a refresh or tab close never runs
@@ -164,7 +192,23 @@ export default function OnlineLobbyScreen() {
       connection.leaveRoom()
       connection.disconnect()
     }
-  }, [])
+  }, [connectAttempt])
+
+  // Reported directly, with a screenshot: a player sitting on this exact "Jugar online" menu
+  // screen clicked "Crear" and got a raw SDK error - the connection to the region master had
+  // silently died sometime after connect() first resolved, with nothing here watching for it, so
+  // the menu just sat there looking identical to a live connection until an operation actually
+  // failed because of it. Scoped to the 'menu' phase specifically - 'lobby' and 'game' both already
+  // have their own, more specific disconnect-handling (onActorLeft/onMasterClientChanged), and a
+  // connection that drops mid-room would fail *those* paths' own way, not this one.
+  useEffect(() => {
+    const connection = connectionRef.current
+    if (!connection || phase !== 'menu') return
+    return connection.onConnectionLost(() => {
+      setErrorMessage(friendlyOnlineError('lost connection to the server'))
+      setPhase('error')
+    })
+  }, [phase])
 
   useEffect(() => {
     const connection = connectionRef.current
@@ -300,7 +344,7 @@ export default function OnlineLobbyScreen() {
         setPhase('lobby')
       })
       .catch((err: unknown) => {
-        setErrorMessage(`No se pudo crear la sala: ${err instanceof Error ? err.message : String(err)}`)
+        setErrorMessage(friendlyOnlineError(err instanceof Error ? err.message : String(err)))
         setPhase('error')
       })
   }
@@ -321,7 +365,7 @@ export default function OnlineLobbyScreen() {
         setPhase('lobby')
       })
       .catch((err: unknown) => {
-        setErrorMessage(`No se pudo unir a la sala: ${err instanceof Error ? err.message : String(err)}`)
+        setErrorMessage(friendlyOnlineError(err instanceof Error ? err.message : String(err)))
         setPhase('error')
       })
   }
@@ -411,7 +455,14 @@ export default function OnlineLobbyScreen() {
 
         {phase === 'connecting' && <p style={hintStyle}>Conectando a Photon...</p>}
 
-        {phase === 'error' && <p style={{ ...hintStyle, color: '#e8a15c' }}>{errorMessage}</p>}
+        {phase === 'error' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: '100%' }}>
+            <p style={{ ...hintStyle, color: '#e8a15c', fontSize: 15 }}>{errorMessage}</p>
+            <button className="chunky-btn" onClick={() => setConnectAttempt((n) => n + 1)} style={chunkyButtonStyle(true)}>
+              Reintentar
+            </button>
+          </div>
+        )}
 
         {phase === 'stopped' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: '100%' }}>

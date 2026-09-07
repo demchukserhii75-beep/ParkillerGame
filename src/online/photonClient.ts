@@ -38,6 +38,19 @@ export class PhotonConnection implements RoomTransport {
   private client: InstanceType<typeof LBC>
   private messageListeners: Array<(data: unknown, senderActorNr: number) => void> = []
   private masterChangeListeners: Array<() => void> = []
+  // Reported directly, found while adding onConnectionLost below: connect() and joinOrCreate()
+  // each used to reassign this.client.onStateChange directly for the duration of their own
+  // pending promise, capturing "whatever was there before" and restoring it once done - fine as
+  // long as nothing else ever touched the field in between. Once onConnectionLost added a second,
+  // *persistent* subscriber that also wrapped-and-restored the same way, the two could interleave
+  // out of order: a menu-phase-scoped listener's cleanup fired *after* joinOrCreate() had already
+  // installed its own handler on top, and restored the stale value it had captured earlier -
+  // silently overwriting (destroying) joinOrCreate()'s own handler before its promise ever
+  // resolved, even though the underlying SDK connection succeeded perfectly. A single, permanent
+  // dispatcher installed once here - every caller (connect(), joinOrCreate(), onConnectionLost)
+  // subscribes into this same stable list instead of ever touching the SDK field directly - has no
+  // such ordering hazard: any number of subscribers can come and go in any order.
+  private stateChangeListeners: Array<(state: number) => void> = []
   private lastKnownMasterActorNr: number | null = null
 
   constructor(appId: string) {
@@ -48,17 +61,39 @@ export class PhotonConnection implements RoomTransport {
     }
     this.client.onActorJoin = () => this.checkMasterChanged()
     this.client.onActorLeave = () => this.checkMasterChanged()
+    this.client.onStateChange = (state: number) => {
+      // Slice a snapshot first - a listener unsubscribing itself (as connect()/joinOrCreate()'s
+      // own one-shot listeners do, the instant their promise settles) must not skip or double-fire
+      // a sibling listener still later in the live array.
+      for (const listener of [...this.stateChangeListeners]) listener(state)
+    }
+  }
+
+  // See stateChangeListeners' own doc comment - every onStateChange subscriber, permanent or
+  // one-shot, goes through here instead of ever touching this.client.onStateChange directly.
+  private subscribeStateChange(listener: (state: number) => void): () => void {
+    this.stateChangeListeners.push(listener)
+    return () => {
+      this.stateChangeListeners = this.stateChangeListeners.filter((l) => l !== listener)
+    }
   }
 
   /** Resolves once connected and sitting in the lobby (ready to create/join a room). */
   connect(region: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.client.onStateChange = (state: number) => {
-        if (this.client.isInLobby()) resolve()
-        else if (state === LBC.State.Error || state === LBC.State.Disconnected) {
+      let settled = false
+      const unsubscribe = this.subscribeStateChange((state) => {
+        if (settled) return
+        if (this.client.isInLobby()) {
+          settled = true
+          unsubscribe()
+          resolve()
+        } else if (state === LBC.State.Error || state === LBC.State.Disconnected) {
+          settled = true
+          unsubscribe()
           reject(new Error(`Photon connection failed (state ${LBC.StateToName(state)})`))
         }
-      }
+      })
       this.client.connectToRegionMaster(region)
     })
   }
@@ -101,17 +136,19 @@ export class PhotonConnection implements RoomTransport {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false
-      this.client.onStateChange = (state: number) => {
+      const unsubscribe = this.subscribeStateChange((state) => {
         if (settled) return
         if (this.client.isJoinedToRoom()) {
           settled = true
+          unsubscribe()
           this.lastKnownMasterActorNr = this.client.myRoomMasterActorNr()
           resolve()
         } else if (state === LBC.State.Error) {
           settled = true
+          unsubscribe()
           reject(new Error('Failed to join or create room'))
         }
-      }
+      })
       // onStateChange alone misses operation-level failures (wrong room code, room full, room
       // already exists) - confirmed directly in the SDK source: those flow only through
       // _onOperationResponseInternal2 -> onOperationResponse, which never touches state at all.
@@ -138,7 +175,40 @@ export class PhotonConnection implements RoomTransport {
                   : errorMsg || `operation error ${errorCode}`
         reject(new Error(reason))
       }
-      this.client.joinRoom(code, joinOptions, createOptions)
+      // Reported directly, with a screenshot: a raw SDK internal message ("PhotonPeer[_send] -
+      // Operation 226 - failed, \"isConnected\" is false, \"isClosing\" is false!") landed
+      // straight on screen instead of a friendly one. Root cause, confirmed in the SDK source:
+      // joinRoom() calls sendOperation() synchronously, and a peer that's silently died since
+      // connect() first resolved (a background timeout/drop while the player was just sitting on
+      // the menu, with nothing watching for it - see the connection-loss handling this fix adds
+      // alongside it, in the `connect()` method above) makes that send throw synchronously rather
+      // than fail through the normal onOperationResponse path just above. Since this whole
+      // method's body already runs inside `new Promise((resolve, reject) => {...})`, an uncaught
+      // throw here would auto-reject with that raw error anyway - but only by accident, not by
+      // design, and worth being explicit about so this doesn't silently start leaking some other
+      // raw SDK string if the internals ever change.
+      try {
+        this.client.joinRoom(code, joinOptions, createOptions)
+      } catch (err) {
+        if (!settled) {
+          settled = true
+          unsubscribe()
+          reject(new Error(`lost connection to the server - try again (${err instanceof Error ? err.message : String(err)})`))
+        }
+      }
+    })
+  }
+
+  // Reported directly, with a screenshot: a player sitting on the "Jugar online" menu screen (not
+  // yet in any room) clicked "Crear" and got a raw SDK error instead of a room - the underlying
+  // connection to the region master had silently died in the background sometime after connect()
+  // first resolved, and nothing was watching for that. This lets a caller find out about a lost
+  // connection whenever it happens, not just at the moment an operation already failed because of
+  // it - OnlineLobbyScreen.tsx uses it to route back to a clear "reconectá" state while sitting on
+  // the menu, instead of leaving a dead connection looking identical to a live one.
+  onConnectionLost(listener: () => void): () => void {
+    return this.subscribeStateChange((state) => {
+      if (state === LBC.State.Error || state === LBC.State.Disconnected) listener()
     })
   }
 
