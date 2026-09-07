@@ -863,6 +863,46 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.some((m) => m.piece === red.pieces[1] && m.resultingTrackPosition === 3)).toBe(true)
   })
 
+  // Reported directly, again, with the client's own literal walkthrough ("Roll: 4 + 4 - Use the
+  // first 4. Pawn A moves 4 spaces and lands with Pawn B... The second 4 is still available.
+  // EXPECTED: The newly-created barrier is allowed to remain closed. The player is NOT required to
+  // move Pawn A or Pawn B with the remaining 4 just because the roll was a double. DO NOT
+  // implement: second 4 automatically forces one of those two pawns to leave"). Uses the client's
+  // own exact numbers (4+4, not the 3+3 above) and explicitly asserts both halves of "not
+  // required": the second die can be spent on a pawn that has nothing to do with the barrier at
+  // all (pieces[1] below), *and*, separately, is never restricted down to only a move that would
+  // break the barrier apart - the barrier pieces themselves (pieces[0]/pieces[2]) staying put is a
+  // real, always-available choice, not something the offered-moves list forces away.
+  it("does not force Pawn A or Pawn B to separate with the double's second die either (client's own 4+4 walkthrough)", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 8 // Pawn B - alone at 8 before this roll, no barrier yet
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0 // unrelated third pawn - must stay completely free
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 4 // Pawn A - 4 -> 8 with the first 4, landing on Pawn B
+
+    const dice = new ScriptedDice([4, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[2]) // Pawn A: 4 -> 8, forms a brand-new barrier with Pawn B
+
+    // Not required to move Pawn A or Pawn B with the remaining 4 - the unrelated third pawn is a
+    // genuine option for the second die.
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.resultingTrackPosition === 4)).toBe(true)
+    // The barrier is allowed to remain closed - the offered moves are never narrowed down to only
+    // "break the barrier apart", the way an *existing* barrier's own obligation would (see the
+    // "restricts a double roll to breaking an existing own barrier" test above, for contrast).
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+
   it('waives the obligation when the barrier truly cannot be broken this roll ("unless movement is impossible")', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
