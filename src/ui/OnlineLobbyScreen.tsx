@@ -198,9 +198,10 @@ export default function OnlineLobbyScreen() {
   // screen clicked "Crear" and got a raw SDK error - the connection to the region master had
   // silently died sometime after connect() first resolved, with nothing here watching for it, so
   // the menu just sat there looking identical to a live connection until an operation actually
-  // failed because of it. Scoped to the 'menu' phase specifically - 'lobby' and 'game' both already
-  // have their own, more specific disconnect-handling (onActorLeft/onMasterClientChanged), and a
-  // connection that drops mid-room would fail *those* paths' own way, not this one.
+  // failed because of it. Scoped to the 'menu' phase specifically - see the *separate*
+  // onConnectionLost subscription further below for 'lobby'/'game', which routes to a different
+  // phase ('stopped', not 'error') since there's a live session to tear down there, not just a
+  // menu to retry from.
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || phase !== 'menu') return
@@ -299,6 +300,35 @@ export default function OnlineLobbyScreen() {
       session?.turnManager.dispose?.()
       setSession(null)
       setStopReason('El anfitrión se desconectó - la partida se detuvo.')
+      setPhase('stopped')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  // Reported directly, with screenshots: the player who *joined* via room code was left frozen
+  // mid-game (stuck on "esperando el turno de X", roll button disabled) while the *other* player's
+  // own screen correctly showed "X salió de la sala" - a real, server-confirmed departure. Neither
+  // onActorLeft nor onMasterClientChanged above ever catches THIS client's *own* connection dying,
+  // only other actors leaving or the Master role changing - if this client's own device sleeps or
+  // loses focus for long enough that Photon's server gives up on it, the server correctly tells
+  // everyone *else* it left, but this client's own JavaScript (paused the whole time, same as its
+  // network) never itself processes any "you've been disconnected" event upon waking: the local
+  // self-teardown sweep (onActorLeave's own cleanup=true case) is deliberately ignored by
+  // onActorLeft to avoid blaming an innocent other player for a hiccup on *this* client's own
+  // connection (see photonClient.ts's own onActorLeft comment) - which means, without this,
+  // *nothing at all* was watching for this client's own connection dying past the 'menu' phase.
+  // onConnectionLost is scoped to 'lobby'/'game' here specifically (see the *separate*
+  // 'menu'-scoped subscription above, which routes to 'error' instead - there's no live session to
+  // tear down yet at that point).
+  useEffect(() => {
+    const connection = connectionRef.current
+    if (!connection || (phase !== 'lobby' && phase !== 'game')) return
+    return connection.onConnectionLost(() => {
+      botControllerRef.current?.dispose()
+      botControllerRef.current = null
+      session?.turnManager.dispose?.()
+      setSession(null)
+      setStopReason('Se perdió la conexión con el servidor - la partida se detuvo.')
       setPhase('stopped')
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
